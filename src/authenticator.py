@@ -1,8 +1,11 @@
 import logging
-from selenium.webdriver.chrome.webdriver import WebDriver
+from selenium.webdriver.remote.webdriver import WebDriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.common.keys import Keys
 from time import sleep
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support import expected_conditions as EC
+from urllib.parse import urlparse, parse_qs
 
 from src.settings import Settings
 
@@ -26,10 +29,20 @@ class Authenticator:
 
         sleep(self.delay)
 
-        # Step 1: Go to the login page
+        # Step 1: Go to the initial login page (will redirect with a fresh login_challenge)
+        logger.info(f"Going to the initial login page: {settings.MSE_INITIAL_LOGIN_URL}")
+        driver.get(settings.MSE_INITIAL_LOGIN_URL)
 
-        logger.info(f"Going to the login page: {settings.MSE_LOGIN_URL}")
-        driver.get(settings.MSE_LOGIN_URL)
+        # Wait for redirect to URL that contains the login_challenge parameter
+        try:
+            WebDriverWait(driver, 15).until(EC.url_contains("login_challenge="))
+            current_url = driver.current_url
+            parsed = urlparse(current_url)
+            challenge = parse_qs(parsed.query).get("login_challenge", [None])[0]
+            if challenge:
+                logger.info(f"Obtained login_challenge token: {challenge}")
+        except Exception:
+            logger.warning("Did not detect login_challenge in URL within timeout; continuing anyway")
         sleep(self.delay)
 
         # Step 2: choose the correct authentication method
@@ -41,8 +54,8 @@ class Authenticator:
 
         # Step 3: Input credentials and submit
         logger.info("Inputting credentials")
-        username_input = driver.find_element(By.NAME, "j_username")
-        password_input = driver.find_element(By.NAME, "j_password")
+        username_input = driver.find_element(By.ID, "login_login")
+        password_input = driver.find_element(By.ID, "login_password")
 
         username_input.send_keys(self.email)
         password_input.send_keys(self.password)
@@ -53,7 +66,7 @@ class Authenticator:
         sleep(self.delay)
 
         # Step 4: Validate the rules
-        self._validate_rules(driver)
+        # self._validate_rules(driver)
 
         # Step 5: Force update the auth status
         driver.get("https://trouverunlogement.lescrous.fr/mse/discovery/connect")
@@ -65,7 +78,7 @@ class Authenticator:
         """Validates the rules of the CROUS website."""
         logger.info("Validating the rules of the CROUS website")
 
-        driver.get("https://trouverunlogement.lescrous.fr/tools/36/rules")
+        driver.get("https://trouverunlogement.lescrous.fr/tools/42/rules")
 
         sleep(self.delay)
 

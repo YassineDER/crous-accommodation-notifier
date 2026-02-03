@@ -3,7 +3,7 @@ from time import sleep
 from typing import List, Optional
 from bs4 import BeautifulSoup
 from pydantic import HttpUrl
-from selenium.webdriver.chrome.webdriver import WebDriver
+from selenium.webdriver.remote.webdriver import WebDriver
 
 from src.models import Accommodation, SearchResults
 from src.settings import Settings
@@ -25,6 +25,9 @@ class Parser:
         self.driver.get(str(search_url))
         sleep(2)
         html = self.driver.page_source
+        # Debug: log a short snapshot of the page HTML to help diagnose parsing issues
+        logger.info(f"Page HTML length: {len(html)}")
+        logger.info("Page HTML (first 2000 chars): %s", html[:2000])
         search_results_soup = BeautifulSoup(html, "html.parser")
         num_accommodations = self._get_accomodations_count(search_results_soup)
         logger.info(f"Found {num_accommodations} accommodations")
@@ -35,25 +38,50 @@ class Parser:
             accommodations=parse_accommodations_summaries(search_results_soup),
         )
 
+    """Parses the number of accommodations from the search results page, along with its price if available"""
     def _get_accomodations_count(
         self, search_results_soup: BeautifulSoup
-    ) -> Optional[int]:
+    ) -> Optional[tuple[int, Optional[float]]]:
         results_heading = search_results_soup.find(
             "h2", class_="SearchResults-desktop fr-h4 svelte-11sc5my"
         )
 
         if not results_heading:
+            logger.error("Could not find results heading to parse number of accommodations")
             return None
 
-        number_or_aucun = results_heading.text.split()[0]
+        # Show the raw heading text and first token for debugging (may contain NBSPs or localization)
+        raw_text = results_heading.text or ""
+        number_or_aucun = raw_text.strip().split()[0] if raw_text.strip() else ""
+        logger.info("Results heading raw text: %r, first token: %r", raw_text, number_or_aucun)
 
         if number_or_aucun == "Aucun":
-            return 0
+            return 0, None
 
         try:
             number = int(number_or_aucun)
-            return number
+            price = self._get_accommodation_price(search_results_soup)
+            return number, price
         except ValueError:
+            logger.error(f"Could not parse number of accommodations: {number_or_aucun}")
+            return None
+        
+    def _get_accommodation_price(
+        self, search_results_soup: BeautifulSoup
+    ) -> Optional[float]:
+        price_badge = search_results_soup.find("p", class_="fr-badge")
+
+        if not price_badge:
+            logger.info("No price badge found on results page")
+            return None
+
+        price_text = price_badge.text.strip().strip("€").strip().replace(",", ".")
+        try:
+            price = float(price_text)
+            logger.info(f"Parsed accommodation price: {price}")
+            return price
+        except ValueError:
+            logger.error(f"Could not parse accommodation price: {price_text}")
             return None
 
 

@@ -13,7 +13,7 @@ class Accommodation(BaseModel):
 
 class SearchResults(BaseModel):
     search_url: HttpUrl
-    count: Optional[int]
+    count: Optional[tuple[int, Optional[float]]]
     accommodations: List[Accommodation]
 
 

@@ -9,6 +9,6 @@ class TelegramNotifier:
         self.bot = bot
 
     def send_notification(
-        self, telegramId: str, notification: Notification, parse_mode: str = "Markdown"
+        self, telegramId: str, notification: Notification, parse_mode: str = "HTML"
     ) -> None:
         self.bot.sendMessage(telegramId, notification.message, parse_mode=parse_mode)
