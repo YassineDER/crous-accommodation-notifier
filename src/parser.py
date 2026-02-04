@@ -26,8 +26,8 @@ class Parser:
         sleep(2)
         html = self.driver.page_source
         # Debug: log a short snapshot of the page HTML to help diagnose parsing issues
-        logger.info(f"Page HTML length: {len(html)}")
-        logger.info("Page HTML (first 2000 chars): %s", html[:2000])
+        # logger.info(f"Page HTML length: {len(html)}")
+        # logger.info("Page HTML (first 2000 chars): %s", html[:2000])
         search_results_soup = BeautifulSoup(html, "html.parser")
         num_accommodations = self._get_accomodations_count(search_results_soup)
         logger.info(f"Found {num_accommodations} accommodations")
@@ -147,8 +147,12 @@ def parse_accommodation_card(card: BeautifulSoup) -> Accommodation | None:
         overview_details.append(detail.text.strip())
 
     price = card.find("p", class_="fr-badge")
-
     price = _try_parse_price(price)
+
+    is_colocative = any("Colocation" in detail for detail in overview_details)
+
+    if accommodation_id is None:
+        return None
 
     return Accommodation(
         id=accommodation_id,
@@ -156,6 +160,7 @@ def parse_accommodation_card(card: BeautifulSoup) -> Accommodation | None:
         image_url=image_url,  # type: ignore
         price=price,
         overview_details="\n".join(overview_details),
+        is_colocative=is_colocative,
     )
 
 

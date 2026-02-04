@@ -9,6 +9,7 @@ class Accommodation(BaseModel):
     price: float | str | None
     overview_details: str | None = None
     image_url: HttpUrl | None = None
+    is_colocative: bool | None = None
 
 
 class SearchResults(BaseModel):
@@ -26,3 +27,5 @@ class UserConf(BaseModel):
     telegram_id: str
     search_url: HttpUrl
     ignored_ids: List[int] = Field(default_factory=list)
+    max_price: Optional[float] = None
+    is_colocative: bool = False

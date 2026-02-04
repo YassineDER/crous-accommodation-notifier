@@ -23,15 +23,18 @@ logging.basicConfig(
 logger = logging.getLogger("accommodation_notifier")
 
 
-def load_users_conf() -> List[UserConf]:
-    bounds = "4.686130820251236_45.92775190489084_5.069965659118424_45.52655459432095"  # Nantes area
+def load_users_conf(
+    max_price: float | None = None, is_colocative: bool = False
+) -> List[UserConf]:
+    bounds = "4.679270004578094_45.940645781504905_5.063104843445282_45.5231871493864"  # Lyon area
     return [
         UserConf(
             conf_title="Me",
             telegram_id=settings.MY_TELEGRAM_ID,
             search_url=f"https://trouverunlogement.lescrous.fr/tools/42/search?bounds={bounds}",  # type:ignore
-            # search_url="https://trouverunlogement.lescrous.fr/tools/42/search",  # type:ignore
             ignored_ids=[2755],
+            max_price=max_price,
+            is_colocative=is_colocative,
         )
     ]
 
@@ -57,9 +60,15 @@ def create_driver(browser: str = "chrome", headless: bool = True) -> WebDriver:
         if headless:
             logging.info("Running Chrome in headless mode")
             ch_options.add_argument("--headless=new")
-            ch_options.add_argument("--disable-gpu")
         else:
             logging.info("Running Chrome in non-headless mode")
+
+        # Suppress noisy Chrome/GPU logs
+        ch_options.add_argument("--disable-gpu")
+        ch_options.add_argument("--disable-software-rasterizer")
+        ch_options.add_argument("--log-level=3")
+        ch_options.add_argument("--disable-background-networking")
+        ch_options.add_experimental_option("excludeSwitches", ["enable-logging"])
 
         ch_options.add_argument("--disable-dev-shm-usage")
         ch_options.add_argument("--no-sandbox")
@@ -84,6 +93,18 @@ if __name__ == "__main__":
         default="chrome",
         help="Browser to use for Selenium (default: chrome)",
     )
+    parser.add_argument(
+        "--max-price",
+        type=float,
+        default=None,
+        help="Maximum price for accommodations",
+    )
+    parser.add_argument(
+        "--is-colocative",
+        action="store_true",
+        default=False,
+        help="Filter for colocative accommodations (default: False)",
+    )
 
     args = parser.parse_args()
 
@@ -91,7 +112,9 @@ if __name__ == "__main__":
     bot = telepot.Bot(token=settings.TELEGRAM_BOT_TOKEN)
     bot.getMe()  # test if the bot is working
 
-    user_confs = load_users_conf()
+    user_confs = load_users_conf(
+        max_price=args.max_price, is_colocative=args.is_colocative
+    )
 
     notification_builder = NotificationBuilder()
     notifier = TelegramNotifier(bot)
@@ -108,6 +131,22 @@ if __name__ == "__main__":
                 for conf in user_confs:
                     logging.info(f"Handling configuration : {conf}")
                     search_results = parser.get_accommodations(conf.search_url)  # type: ignore
+
+                    # Filter accommodations based on UserConf
+                    filtered_accommodations = [
+                        acc
+                        for acc in search_results.accommodations
+                        if (
+                            conf.max_price is None
+                            or (
+                                isinstance(acc.price, (int, float))
+                                and acc.price <= conf.max_price
+                            )
+                        )
+                        and (acc.is_colocative == conf.is_colocative)
+                    ]
+                    search_results.accommodations = filtered_accommodations
+
                     notification = notification_builder.search_results_notification(search_results)
                     if notification:
                         notifier.send_notification(conf.telegram_id, notification)

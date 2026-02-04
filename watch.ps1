@@ -6,7 +6,7 @@ while ($true) {
     Write-Host "To stop, press Ctrl+C"
     Write-Host "---------------------------------------------"
     
-    poetry run python main.py
+    poetry run python main.py --max-price 300
     
     $exitCode = $lastexitcode
     
